@@ -1,20 +1,17 @@
 package p4
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"path"
 	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func runUnmarshall(t *testing.T, testFile string) ([]map[interface{}]interface{}, []error) {
-	results := make([]map[interface{}]interface{}, 0)
+/*
+func runUnmarshall(t *testing.T, testFile string) ([]map[string]string, []error) {
+	results := make([]map[string]string, 0)
 	errors := []error{}
 	fname := path.Join("testdata", testFile)
 	buf, err := ioutil.ReadFile(fname)
@@ -32,7 +29,7 @@ func runUnmarshall(t *testing.T, testFile string) ([]map[interface{}]interface{}
 				// Empty result for the end of the object
 				break
 			}
-			results = append(results, r.(map[interface{}]interface{}))
+			results = append(results, r.(map[string]string))
 		} else {
 			errors = append(errors, err)
 			break
@@ -40,90 +37,7 @@ func runUnmarshall(t *testing.T, testFile string) ([]map[interface{}]interface{}
 	}
 	return results, errors
 }
-
-func assertMapContains(t *testing.T, result map[interface{}]interface{}, key string, expected string) {
-	val, ok := result[key]
-	assert.True(t, ok, fmt.Sprintf("key not found: %s", key))
-	assert.Equal(t, expected, val)
-}
-
-func TestUnmarshallInfo(t *testing.T) {
-	results, errors := runUnmarshall(t, "info.bin")
-	assert.Equal(t, 1, len(results))
-	if !assert.Equal(t, 0, len(errors)) {
-		t.Fatalf("Unexpected number of errors: %v", errors)
-	}
-
-	assertMapContains(t, results[0], "serverAddress", "unknown")
-}
-
-func TestUnmarshallChanges(t *testing.T) {
-	results, errors := runUnmarshall(t, "changes.bin")
-	assert.Equal(t, 3, len(results))
-	if !assert.Equal(t, 0, len(errors)) {
-		t.Fatalf("Unexpected number of errors: %v", errors)
-	}
-	assertMapContains(t, results[0], "change", "3")
-	assertMapContains(t, results[1], "change", "2")
-	assertMapContains(t, results[2], "change", "1")
-
-	assertMapContains(t, results[1], "time", "1557746038")
-	assertMapContains(t, results[1], "user", "rcowham")
-	assertMapContains(t, results[1], "client", "rcowham-dvcs-1557689468")
-	assertMapContains(t, results[1], "status", "submitted")
-	assertMapContains(t, results[1], "changeType", "public")
-	assertMapContains(t, results[1], "path", "//stream/main/p4cmdf/*")
-	assertMapContains(t, results[1], "desc", "second")
-
-	assertMapContains(t, results[0], "desc", "Multi line change description\nS")
-}
-
-func TestUnmarshallChangesLongDesc(t *testing.T) {
-	results, errors := runUnmarshall(t, "changes-l.bin")
-	assert.Equal(t, 3, len(results))
-	if !assert.Equal(t, 0, len(errors)) {
-		t.Fatalf("Unexpected number of errors: %v", errors)
-	}
-	assertMapContains(t, results[0], "change", "3")
-	assertMapContains(t, results[1], "change", "2")
-	assertMapContains(t, results[2], "change", "1")
-
-	assertMapContains(t, results[0], "desc", "Multi line change description\nSecond line\nThird line\n")
-}
-
-func TestUnmarshallFetchChange(t *testing.T) {
-	results, errors := runUnmarshall(t, "change-o.bin")
-	assert.Equal(t, 1, len(results))
-	if !assert.Equal(t, 0, len(errors)) {
-		t.Fatalf("Unexpected number of errors: %v", errors)
-	}
-	assertMapContains(t, results[0], "Change", "new")
-	assertMapContains(t, results[0], "Status", "new")
-	assertMapContains(t, results[0], "Description", "<enter description here>\n")
-	assertMapContains(t, results[0], "Client", "rcowham-dvcs-1557689468")
-	assertMapContains(t, results[0], "User", "rcowham")
-}
-
-func TestUnmarshallFetchProtects(t *testing.T) {
-	results, errors := runUnmarshall(t, "protects.bin")
-	assert.Equal(t, 4, len(results))
-	if !assert.Equal(t, 0, len(errors)) {
-		t.Fatalf("Unexpected number of errors: %v", errors)
-	}
-	assertMapContains(t, results[0], "code", "stat")
-	assertMapContains(t, results[0], "perm", "write")
-	assertMapContains(t, results[0], "host", "*")
-	assertMapContains(t, results[0], "user", "*")
-	assertMapContains(t, results[0], "line", "1")
-	assertMapContains(t, results[0], "depotFile", "//...")
-	assertMapContains(t, results[3], "code", "stat")
-	assertMapContains(t, results[3], "perm", "super")
-	assertMapContains(t, results[3], "host", "*")
-	assertMapContains(t, results[3], "user", "*")
-	assertMapContains(t, results[3], "line", "4")
-	assertMapContains(t, results[3], "depotFile", "//...")
-}
-
+*/
 func TestFormatSpec(t *testing.T) {
 	spec := map[string]string{"Change": "new",
 		"Description": "My line\nSecond line\nThird line\n",
@@ -136,13 +50,13 @@ func TestFormatSpec(t *testing.T) {
 }
 
 type parseErrorTest struct {
-	input map[interface{}]interface{}
+	input map[string]string
 	want  error
 }
 
 var parseErrorTests = []parseErrorTest{
 	{
-		input: map[interface{}]interface{}{
+		input: map[string]string{
 			"code":     "error",
 			"data":     "//fake/depot/... - must refer to client 'HOSTNAME'.",
 			"generic":  "2",
@@ -151,7 +65,7 @@ var parseErrorTests = []parseErrorTest{
 		want: errors.New("P4Error -> No such area '//fake/depot/...', please check your path"),
 	},
 	{
-		input: map[interface{}]interface{}{
+		input: map[string]string{
 			"code":     "error",
 			"data":     "some unknown error",
 			"generic":  "2",

@@ -10,6 +10,7 @@ p4 Python parsing module is based on: https://github.com/hambster/gopymarshal
 package p4
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -108,24 +109,26 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 		return nil, errors.New(stderr.String())
 	}
 	results := make([]map[string]string, 0)
+	buf := bufio.NewReader(&stdout)
 	for {
+		line, _, _ := buf.ReadLine()
 		r := make(map[string]string)
-		err := json.NewDecoder(&stdout).Decode(&r)
-		if err == io.EOF {
-			break
-		}
-		if err == nil {
-			if r == nil {
-				// End of object
+		if len(line) > 0 {
+			err := json.Unmarshal(line, &r)
+			if err == io.EOF || err != nil {
+				if mainerr == nil {
+					mainerr = err
+				}
 				break
 			}
-			results = append(results, r)
 		} else {
-			if mainerr == nil {
-				mainerr = err
-			}
+			break //empty line
+		}
+		if r == nil {
+			// End of object
 			break
 		}
+		results = append(results, r)
 	}
 	return results, mainerr
 }

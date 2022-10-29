@@ -95,6 +95,14 @@ func TestSave(t *testing.T) {
 	fmt.Println(res)
 }
 
+func TestDepots(t *testing.T) {
+	p4 := NewP4Params("localhost:1666", "brett", "bb_ws")
+	res, err := p4.Run([]string{"depots"})
+	assert.Nil(t, err)
+	fmt.Println(res)
+	assert.Len(t, res, 3)
+}
+
 func BenchmarkInfo(b *testing.B) {
 	p4 := NewP4Params("localhost:1666", "brett", "bb_ws")
 	for n := 0; n < b.N; n++ {

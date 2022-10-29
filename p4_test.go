@@ -171,13 +171,20 @@ func TestParseError(t *testing.T) {
 func TestSave(t *testing.T) {
 	ds := map[string]string{
 		"Job":         "DEV-123",
-		"Title":       "A failing update",
-		"Status":      "UNKNOWN",
-		"Assignee":    "a.person@email.com",
+		"Status":      "open",
+		"User":        "a.person",
 		"Description": "Desc2",
 	}
-	p4 := NewP4Params("p4training.hh.imgtec.org:1666", "brett.bates", "p4go_test_ws")
+	p4 := NewP4Params("localhost:1666", "brett", "bb_ws")
 	res, err := p4.SaveTxt("job", ds, []string{})
 	assert.Nil(t, err)
 	fmt.Println(res)
+}
+
+func BenchmarkInfo(b *testing.B) {
+	p4 := NewP4Params("localhost:1666", "brett", "bb_ws")
+	for n := 0; n < b.N; n++ {
+		_, err := p4.Run([]string{"info"})
+		assert.Nil(b, err)
+	}
 }

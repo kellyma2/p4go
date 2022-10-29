@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"math"
 )
@@ -248,6 +249,22 @@ func (p4 *P4) getOptions() []string {
 }
 
 // Get options that go before the p4 command
+func (p4 *P4) getJOptions() []string {
+	opts := []string{"-Mj", "-ztag"}
+
+	if p4.port != "" {
+		opts = append(opts, "-p", p4.port)
+	}
+	if p4.user != "" {
+		opts = append(opts, "-u", p4.user)
+	}
+	if p4.client != "" {
+		opts = append(opts, "-c", p4.client)
+	}
+	return opts
+}
+
+// Get options that go before the p4 command
 func (p4 *P4) getOptionsNonMarshal() []string {
 	opts := []string{}
 
@@ -269,8 +286,8 @@ type Runner interface {
 }
 
 // Run - runs p4 command and returns map
-func (p4 *P4) Run(args []string) ([]map[interface{}]interface{}, error) {
-	opts := p4.getOptions()
+func (p4 *P4) Run(args []string) ([]map[string]string, error) {
+	opts := p4.getJOptions()
 	args = append(opts, args...)
 	cmd := exec.Command("p4", args...)
 	var stdout, stderr bytes.Buffer
@@ -282,9 +299,10 @@ func (p4 *P4) Run(args []string) ([]map[interface{}]interface{}, error) {
 	if stderr.Len() > 0 {
 		return nil, errors.New(stderr.String())
 	}
-	results := make([]map[interface{}]interface{}, 0)
+	results := make([]map[string]string, 0)
 	for {
-		r, err := Unmarshal(&stdout)
+		r := make(map[string]string)
+		err := json.NewDecoder(&stdout).Decode(&r)
 		if err == io.EOF {
 			break
 		}
@@ -293,7 +311,7 @@ func (p4 *P4) Run(args []string) ([]map[interface{}]interface{}, error) {
 				// End of object
 				break
 			}
-			results = append(results, r.(map[interface{}]interface{}))
+			results = append(results, r)
 		} else {
 			if mainerr == nil {
 				mainerr = err
@@ -332,7 +350,7 @@ func parseError(res map[interface{}]interface{}) error {
 func formatSpec(specContents map[string]string) string {
 	var output bytes.Buffer
 	for k, v := range specContents {
-		if strings.Index(v, "\n") > -1 {
+		if strings.Contains(v, "\n") {
 			output.WriteString(fmt.Sprintf("%s:", k))
 			lines := strings.Split(v, "\n")
 			for i := range lines {
@@ -349,7 +367,7 @@ func formatSpec(specContents map[string]string) string {
 }
 
 // Save - runs p4 -i for specified spec returns result
-func (p4 *P4) Save(specName string, specContents map[string]string, args []string) ([]map[interface{}]interface{}, error) {
+func (p4 *P4) Save(specName string, specContents map[string]string, args []string) ([]map[string]string, error) {
 	opts := p4.getOptions()
 	nargs := []string{specName, "-i"}
 	nargs = append(nargs, args...)
@@ -374,15 +392,19 @@ func (p4 *P4) Save(specName string, specContents map[string]string, args []strin
 	stdin.Close()
 	cmd.Wait()
 
-	results := make([]map[interface{}]interface{}, 0)
+	results := make([]map[string]string, 0)
 	for {
-		r, err := Unmarshal(&stdout)
-		if err == io.EOF || r == nil {
+		r := make(map[string]string)
+		err := json.NewDecoder(&stdout).Decode(&r)
+		if err == io.EOF {
 			break
 		}
 		if err == nil {
-			results = append(results, r.(map[interface{}]interface{}))
-			fmt.Println(r)
+			if r == nil {
+				// End of object
+				break
+			}
+			results = append(results, r)
 		} else {
 			if mainerr == nil {
 				mainerr = err

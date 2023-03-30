@@ -5,7 +5,6 @@ It assumes p4 or p4.exe is in the PATH.
 It uses the p4 -G global option which returns Python marshalled dictionary objects.
 
 p4 Python parsing module is based on: https://github.com/hambster/gopymarshal
-
 */
 package p4
 
@@ -315,6 +314,14 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 		} else {
 			if mainerr == nil {
 				mainerr = err
+			}
+			// The stdout contains context regarding the error
+			// in some cases, e.g. password expiring so we should
+			// also populate the results to convey the error details
+			// to the caller. Otherwise they'll just see an "exit
+			// status 1" in the error and empty results.
+			if r != nil {
+				results = append(results, r)
 			}
 			break
 		}

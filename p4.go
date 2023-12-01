@@ -300,9 +300,10 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 		return nil, errors.New(stderr.String())
 	}
 	results := make([]map[string]string, 0)
+	jdecoder := json.NewDecoder(&stdout)
 	for {
 		r := make(map[string]string)
-		err := json.NewDecoder(&stdout).Decode(&r)
+		err := jdecoder.Decode(&r)
 		if err == io.EOF {
 			break
 		}

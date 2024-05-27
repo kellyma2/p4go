@@ -107,17 +107,19 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 	if stderr.Len() > 0 {
 		return nil, errors.New(stderr.String())
 	}
+  
 	results := make([]map[string]string, 0)
-	buf := bufio.NewReader(&stdout)
+	jdecoder := json.NewDecoder(&stdout)
 	for {
 		line, _, _ := buf.ReadLine()
 		r := make(map[string]string)
-		if len(line) > 0 {
-			err := json.Unmarshal(line, &r)
-			if err == io.EOF || err != nil {
-				if mainerr == nil {
-					mainerr = err
-				}
+		err := jdecoder.Decode(&r)
+		if err == io.EOF {
+			break
+		}
+		if err == nil {
+			if r == nil {
+				// End of object
 				break
 			}
 		} else {

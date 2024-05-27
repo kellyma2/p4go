@@ -110,6 +110,8 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
   
 	results := make([]map[string]string, 0)
 	jdecoder := json.NewDecoder(&stdout)
+	buf := bufio.NewReader(&stdout)
+
 	for {
 		line, _, _ := buf.ReadLine()
 		r := make(map[string]string)

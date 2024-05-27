@@ -5,11 +5,11 @@ It assumes p4 or p4.exe is in the PATH.
 It uses the p4 -G global option which returns Python marshalled dictionary objects.
 
 p4 Python parsing module is based on: https://github.com/hambster/gopymarshal
-
 */
 package p4
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -19,185 +19,9 @@ import (
 	"regexp"
 	"strings"
 
-	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"math"
 )
-
-// Parsing constants
-const (
-	codeNone     = 'N' //None
-	codeInt      = 'i' //integer
-	codeInt2     = 'c' //integer2
-	codeFloat    = 'g' //float
-	codeString   = 's' //string
-	codeUnicode  = 'u' //unicode string
-	codeTString  = 't' //tstring?
-	codeTuple    = '(' //tuple
-	codeList     = '[' //list
-	codeDict     = '{' //dict
-	codeStop     = '0'
-	codeEnd      = 0 //end of the object
-	dictInitSize = 64
-)
-
-// Parse error
-var (
-	ErrParse       = errors.New("invalid data")
-	ErrUnknownCode = errors.New("unknown code")
-)
-
-// Unmarshal data serialized by python
-func Unmarshal(buffer *bytes.Buffer) (ret interface{}, retErr error) {
-	ret, _, retErr = Unmarshal2(buffer)
-	return
-}
-
-// Unmarshal2 data serialized by python, returning the unused portion.
-func Unmarshal2(buffer *bytes.Buffer) (ret interface{}, remainder []byte, retErr error) {
-	code, err := buffer.ReadByte()
-	if nil != err {
-		retErr = err
-	}
-	ret, retErr = unmarshal(code, buffer)
-	remainder = buffer.Bytes()
-	return
-}
-
-func unmarshal(code byte, buffer *bytes.Buffer) (ret interface{}, retErr error) {
-	switch code {
-	case codeNone:
-		ret = nil
-	case codeInt:
-		fallthrough
-	case codeInt2:
-		ret, retErr = readInt32(buffer)
-	case codeFloat:
-		ret, retErr = readFloat64(buffer)
-	case codeString:
-		fallthrough
-	case codeUnicode:
-		fallthrough
-	case codeTString:
-		ret, retErr = readString(buffer)
-	case codeTuple:
-		fallthrough
-	case codeList:
-		ret, retErr = readList(buffer)
-	case codeDict:
-		ret, retErr = readDict(buffer)
-	case codeEnd:
-		ret, retErr = nil, nil
-	default:
-		retErr = ErrUnknownCode
-	}
-
-	return
-}
-
-func readInt32(buffer *bytes.Buffer) (ret int32, retErr error) {
-	var tmp int32
-	retErr = ErrParse
-	if retErr = binary.Read(buffer, binary.LittleEndian, &tmp); nil == retErr {
-		ret = tmp
-	}
-
-	return
-}
-
-func readFloat64(buffer *bytes.Buffer) (ret float64, retErr error) {
-	retErr = ErrParse
-	tmp := make([]byte, 8)
-	if num, err := buffer.Read(tmp); nil == err && 8 == num {
-		bits := binary.LittleEndian.Uint64(tmp)
-		ret = math.Float64frombits(bits)
-		retErr = nil
-	}
-
-	return
-}
-
-func readString(buffer *bytes.Buffer) (ret string, retErr error) {
-	var strLen int32
-	strLen = 0
-	retErr = ErrParse
-	if err := binary.Read(buffer, binary.LittleEndian, &strLen); nil != err {
-		retErr = err
-		return
-	}
-
-	retErr = nil
-	buf := make([]byte, strLen)
-	buffer.Read(buf)
-	ret = string(buf)
-	return
-}
-
-func readList(buffer *bytes.Buffer) (ret []interface{}, retErr error) {
-	var listSize int32
-	if retErr = binary.Read(buffer, binary.LittleEndian, &listSize); nil != retErr {
-		return
-	}
-
-	var code byte
-	var err error
-	var val interface{}
-	ret = make([]interface{}, int(listSize))
-	for idx := 0; idx < int(listSize); idx++ {
-		code, err = buffer.ReadByte()
-		if nil != err {
-			break
-		}
-
-		val, err = unmarshal(code, buffer)
-		if nil != err {
-			retErr = err
-			break
-		}
-		ret = append(ret, val)
-	} //end of read loop
-
-	return
-}
-
-func readDict(buffer *bytes.Buffer) (ret map[interface{}]interface{}, retErr error) {
-	var code byte
-	var err error
-	var key interface{}
-	var val interface{}
-	ret = make(map[interface{}]interface{})
-	for {
-		code, err = buffer.ReadByte()
-		if nil != err {
-			break
-		}
-
-		if code == codeStop {
-			break
-		}
-
-		key, err = unmarshal(code, buffer)
-		if nil != err {
-			retErr = err
-			break
-		}
-
-		code, err = buffer.ReadByte()
-		if nil != err {
-			break
-		}
-
-		val, err = unmarshal(code, buffer)
-		if nil != err {
-			retErr = err
-			break
-		}
-		ret[key] = val
-	} //end of read loop
-
-	return
-}
 
 // P4 - environment for P4
 type P4 struct {
@@ -230,22 +54,6 @@ func (p4 *P4) RunBytes(args []string) ([]byte, error) {
 		return data, err
 	}
 	return data, nil
-}
-
-// Get options that go before the p4 command
-func (p4 *P4) getOptions() []string {
-	opts := []string{"-G"}
-
-	if p4.port != "" {
-		opts = append(opts, "-p", p4.port)
-	}
-	if p4.user != "" {
-		opts = append(opts, "-u", p4.user)
-	}
-	if p4.client != "" {
-		opts = append(opts, "-c", p4.client)
-	}
-	return opts
 }
 
 // Get options that go before the p4 command
@@ -282,7 +90,7 @@ func (p4 *P4) getOptionsNonMarshal() []string {
 
 // Runner is an interface to make testing p4 commands more easily
 type Runner interface {
-	Run([]string) ([]map[interface{}]interface{}, error)
+	Run([]string) ([]map[string]string, error)
 }
 
 // Run - runs p4 command and returns map
@@ -299,9 +107,11 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 	if stderr.Len() > 0 {
 		return nil, errors.New(stderr.String())
 	}
+  
 	results := make([]map[string]string, 0)
 	jdecoder := json.NewDecoder(&stdout)
 	for {
+		line, _, _ := buf.ReadLine()
 		r := make(map[string]string)
 		err := jdecoder.Decode(&r)
 		if err == io.EOF {
@@ -312,23 +122,31 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 				// End of object
 				break
 			}
-			results = append(results, r)
 		} else {
 			if mainerr == nil {
 				mainerr = err
 			}
+			// The stdout contains context regarding the error
+			// in some cases, e.g. password expiring so we should
+			// also populate the results to convey the error details
+			// to the caller. Otherwise they'll just see an "exit
+			// status 1" in the error and empty results.
+			if r != nil {
+				results = append(results, r)
+			}
 			break
 		}
+		results = append(results, r)
 	}
 	return results, mainerr
 }
 
 // parseError turns perforce error messages into go error's
-func parseError(res map[interface{}]interface{}) error {
+func parseError(res map[string]string) error {
 	var err error
 	var e string
 	if v, ok := res["data"]; ok {
-		e = v.(string)
+		e = v
 	} else {
 		// I don't know if we can get in this situation
 		e = fmt.Sprintf("Failed to parse error %v", err)
@@ -369,7 +187,7 @@ func formatSpec(specContents map[string]string) string {
 
 // Save - runs p4 -i for specified spec returns result
 func (p4 *P4) Save(specName string, specContents map[string]string, args []string) ([]map[string]string, error) {
-	opts := p4.getOptions()
+	opts := p4.getJOptions()
 	nargs := []string{specName, "-i"}
 	nargs = append(nargs, args...)
 	args = append(opts, nargs...)
@@ -447,11 +265,17 @@ func (p4 *P4) SaveTxt(specName string, specContents map[string]string, args []st
 	cmd.Wait()
 
 	e, err := ioutil.ReadAll(&stderr)
+	if err != nil {
+		fmt.Println("An error occured: ", err)
+	}
 	log.Println(e)
 	if len(e) > 0 {
 		return "", errors.New(string(e))
 	}
 	x, err := ioutil.ReadAll(&stdout)
+	if err != nil {
+		fmt.Println("An error occured: ", err)
+	}
 	s := string(x)
 	log.Println(s)
 	return s, mainerr

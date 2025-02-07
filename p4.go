@@ -113,7 +113,7 @@ func (p4 *P4) Run(args []string) ([]map[string]string, error) {
 	buf := bufio.NewReader(&stdout)
 
 	for {
-		line, _, _ := buf.ReadLine()
+		_, _, _  = buf.ReadLine()
 		r := make(map[string]string)
 		err := jdecoder.Decode(&r)
 		if err == io.EOF {
